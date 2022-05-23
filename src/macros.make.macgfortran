@@ -1,0 +1,116 @@
+# For parallel make
+GMAKEMINUSJ = -j1    # test -j2
+
+NETCDFX = /usr/local/Cellar/netcdf/4.7.4_2
+INCNETCDF = -I$(NETCDF)/include
+#LIBNETCDF = $(NETCDF)/lib/libnetcdf.a
+LIBNETCDF = -L$(NETCDF)/lib -lnetcdf -lnetcdff
+
+# Compiler settings. Add build-specific cpp definitions here if needed.  
+BUILD_DEFINES = -UMATCH_MAN -UWRITE_AND_STOP -DUSEMPIMOD -DSWM
+CPP        = /usr/local/Cellar/gcc/10.2.0_4/bin/gcc-10
+#CPP        = gcc
+#CPP_OPTS   = -E -C -P
+CPP_OPTS   = -E  -P       # -C leaves /*  /* problem for alloc_diag.F90
+CPP_FLAGS  = $(CPP_OPTS) $(GPTLINCLUDE) $(GRFLAGS) $(DEFINES) $(BUILD_DEFINES)
+#FC         = /usr/local/Cellar/mpich/3.2_1/bin/mpifort
+FC         = /usr/local/Cellar/gcc/10.2.0_4/bin/gfortran-10
+FCserial   = /usr/local/Cellar/gcc/10.2.0_4/bin/gfortran-10
+FCfrontend = $(FCserial)
+FCgfort    = $(FCserial)
+FCncarg    = ncargf90
+
+#JR Change FCncarg to use ncargf90 when ncl module loads correctly
+FCncarg    = ncargf90
+
+# For sure ifort, and maybe other compilers, require a special flag to guarantee
+# that local arrays within subroutines called from within threaded regions
+# have separate stack storage. For now this is only needed in slint
+LOCALSTACKFLAG = -fopenmp
+R8FLAG = -fdefault-real-8  # intel -r8
+
+# Fortran flags for various subdirs. If DEBUG=yes, set for debugging
+# fpe0 will cause the code to abort on overflow, divide-by-zero, or invalid
+# fpe0 does not change the output but adds about 15% to the run time
+DEBUG = no
+OPENMP = no
+#OPENMP = yes
+ifeq ($(DEBUG),yes)
+  GFSW3FLAGS = -g -O0 
+  DYNFLAGS   = -g -O0 -fbacktrace
+  PHYSFLAGS  = -g -O0 -I ../include
+  GRIMSFLAGS = -g -O0 -fbacktrace -I ../include
+else
+  GFSW3FLAGS = -g -O1 -fno-range-check -fdollar-ok $(R8FLAG)    # equal.. -r8 ifort == -fdefault-real-8
+#  DYNFLAGS   = -g -O1 -fbacktrace -fno-range-check -ffree-line-length-none -fdollar-ok -fdefault-integer-8 # default n=132
+  DYNFLAGS   = -g -fcheck=all -Wall -O1 -fbacktrace -fno-range-check -ffree-line-length-none -fdollar-ok $(R8FLAG) # default n=132
+  PHYSFLAGS  = -g -O1 -I ../include -fno-range-check  -ffree-line-length-none $(R8FLAG)
+  GRIMSFLAGS = -g -O1 -fbacktrace -I ../include -ffree-line-length-none $(R8FLAG)
+endif
+DYNFLAGS += $(INCNETCDF) $(LIBNETCDF)
+CNTLFLAGS = $(DYNFLAGS)
+UTILFLAGS = $(DYNFLAGS)
+PREPFLAGS = $(DYNFLAGS)
+POSTFLAGS = $(DYNFLAGS)
+FOPT      = $(DYNFLAGS)    # YGYU for libsrc
+MATHFLAGS = $(DYNFLAGS)  -fdefault-double-8 # YGYU for basiclib.a prevent dsqrt( real*8 ) error
+
+# MPI include location
+#INCMPI=$(I_MPI_ROOT)/include64
+INCMPI=/usr/local/Cellar/open-mpi/4.1.0/include
+      # /usr/local/Cellar/mpich/3.2_1/include
+# Ruby interpreter location
+export SMS__RUBY=/usr/bin/ruby
+# SMS library location
+SMS=$(SRCDIR)/../sms_r840/mac-gnu
+
+
+DOPOST=no # should we build post?
+DOPREP=yes # should we build prep?
+
+# Flag to target native mode on Xeon-Phi (empty for everyone except xeonphi)
+MICFLAGS =
+
+# Implicit real*8 flag needed in physics
+
+
+# sind, cosd, etc. definitions only needed with gfortran
+NEED_SINDCOSD = no
+
+# For gfortran, RCWFLAG needs to be set to write 4-byte record control words. On other compilers
+# that is the default
+RCWFLAG = 
+
+# Flag to enable OpenMP ("makenim" automatically sets this to yes or no)
+# Want OMP-enabled SMS library when building in OMP mode
+ifeq ($(OPENMP),yes)
+  OMPFLAG = -fopenmp
+  BUILD_DEFINES += -D_OPENMP
+  SMSLIBNAME = smsomp
+else
+  SMSLIBNAME = sms
+endif
+
+# GPTL timing library: To shut off entirely, set USE_GPTL = no
+ifeq ($(PAR),parallel)
+  USE_GPTL = yes    # original yes
+else
+  USE_GPTL = yes   # Use dummy gptl for serial builds
+endif
+
+ifeq ($(USE_GPTL),yes)
+  ifeq ($(PAR),parallel)
+    ifeq ($(OPENMP),yes)
+      GPTLROOT = /Volumes/Software/gptl_r778/gfortran_mpi    # mac       
+    else
+      GPTLROOT = /Volumes/Software/gptl_r778/gfortran_mpi
+    endif
+  endif
+  GPTLINCLUDE = -I$(GPTLROOT)/include
+  GPTLLIB     = -L$(GPTLROOT)/lib -lgptl
+endif
+
+compiler= gfortran              # YGYU add
+#MATHLIB= $(HOME)/igloo/basiclib/basiclib.a    # YGYU add
+MATHLIB= libmath.a             # YGYU add
+QRLIB=   libqr.a                # YGYU 
